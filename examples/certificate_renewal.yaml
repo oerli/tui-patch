@@ -1,0 +1,35 @@
+tasks: &tasks
+  - command: 'test -x /usr/bin/certbot'
+    expected_result: 0
+    stop_on_error: true
+
+  - command: 'sleep $[ ( $RANDOM % 60) + 1 ]'
+    expected_result: 0
+    stop_on_error: true
+
+  - command: 'sudo certbot renew --force-renewal'
+    expected_result: 0
+    stop_on_error: true
+
+  - command: 'sleep 10'
+    expected_result: 0
+    stop_on_error: true
+
+  - command: 'certbot certificates'
+    expected_result: 0
+    stop_on_error: false
+
+  - command: 'certbot certificates | awk ''match($0, /\(.*\)/){print substr($0, RSTART, RLENGTH)}'' | grep ''89\|90'''
+    expected_result: 0
+    stop_on_error: false
+
+targets:
+  - host: 'server1.domain.com'
+    user: 'user'
+    port: 22
+    tasks: *tasks
+  
+  - host: 'server2.domain.com'
+    user: 'user'
+    port: 22
+    tasks: *tasks

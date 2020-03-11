@@ -1,0 +1,32 @@
+tasks: &tasks
+  # check no other apt/dpkg process is running
+  - command: 'lsof /var/lib/dpkg/lock'
+    expected_result: 1
+    stop_on_error: true
+
+  - command: 'sudo apt-get autoremove --yes'
+    expected_result: 0
+    stop_on_error: true
+
+  - command: 'sudo apt-get update --yes'
+    expected_result: 0
+    stop_on_error: true
+
+  - command: 'sudo apt-get full-upgrade --yes'
+    expected_result: 0
+    stop_on_error: true
+
+  - command: 'sudo shutdown -r +1'
+    expected_result: 0
+    stop_on_error: false
+
+targets:
+  - host: 'server1.domain.com'
+    user: 'user'
+    port: 22
+    tasks: *tasks
+  
+  - host: 'server2.domain.com'
+    user: 'user'
+    port: 22
+    tasks: *tasks
