@@ -21,6 +21,7 @@ use config::{Config, State};
 // - add timeout to yaml
 // - check ssh agent running
 // - ssh key added
+// - todo limit processes
 
 fn main() {
     // read parameters

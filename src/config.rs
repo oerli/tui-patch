@@ -1,6 +1,6 @@
 use std::io::prelude::*;
 use std::net::{TcpStream};
-use ssh2::{Session, Error};
+use ssh2::{Session, Error, ErrorCode};
 
 use serde::Deserialize;
 
@@ -49,13 +49,13 @@ impl Target {
                     },
                     Err(e) => {
                         output.write(LogSeverity::Failed, &format!("Connection Error: {}", e)).unwrap();
-                        return Err(Error::new(-1,"Connection Error"))
+                        return Err(Error::new(ErrorCode::Session(-26), "Connection Error"))
                     }
                 }
             },
             Err(e) => {
                 output.write(LogSeverity::Failed, &format!("Connection Error: {}", e)).unwrap();
-                return Err(Error::new(-2, "Connection Error"))
+                return Err(Error::new(ErrorCode::Session(-9), "Connection Error"))
             }
         }
     }
