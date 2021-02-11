@@ -1,6 +1,6 @@
 use std::io::prelude::*;
 use std::net::{TcpStream};
-use ssh2::{Session, Error, ErrorCode};
+use ssh2::{Session, Error, ErrorCode, ExtendedData};
 
 use serde::Deserialize;
 
@@ -65,11 +65,16 @@ impl Task {
     pub fn run(&self, session: &Session, output: &mut LogFile) -> Result<State, Error> {
         // Run command in session
         let mut channel = session.channel_session()?;
+
+        // Add stderr stream to normal output
+        channel.handle_extended_data(ExtendedData::Merge)?;
+
         channel.exec(&self.command)?;
         
         let mut buffer = String::new();
+
         channel.read_to_string(&mut buffer).unwrap();
-        
+
         channel.wait_close()?;
 
         output.write(LogSeverity::Info, &buffer).unwrap();
