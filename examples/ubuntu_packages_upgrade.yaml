@@ -1,21 +1,46 @@
 tasks: &tasks
+  # get system infos
+  - command: 'hostnamectl status'
+    expected_result: 0
+    stop_on_error: false
+
   # check no other apt/dpkg process is running
   - command: 'lsof /var/lib/dpkg/lock'
     expected_result: 1
     stop_on_error: true
+  
+  # check no other apt/dpkg process is running
+  - command: 'lsof /var/lib/dpkg/lock-frontend'
+    expected_result: 1
+    stop_on_error: true
 
-  - command: 'sudo apt-get autoremove --yes'
+  # remove old packages
+  - command: 'sudo DEBIAN_FRONTEND=noninteractive apt-get -q autoremove --yes'
     expected_result: 0
     stop_on_error: true
 
-  - command: 'sudo apt-get update --yes'
+  # check free disk space on /boot if less than 80% used continue
+  - command: |
+      if test -z $(df -h | grep "/boot")
+      then
+        echo "no boot disk found"
+      else
+        test $(df -h | grep "/boot" | awk {print\ \$5} | sed s/%//g) -lt 80
+      fi
     expected_result: 0
     stop_on_error: true
 
-  - command: 'sudo apt-get full-upgrade --yes'
+  # update apt repository
+  - command: 'sudo apt-get update -q --yes'
     expected_result: 0
     stop_on_error: true
 
+  # upgrade packages and also update to the most recent kernel
+  - command: 'sudo DEBIAN_FRONTEND=noninteractive apt-get -q full-upgrade --yes'
+    expected_result: 0
+    stop_on_error: true
+
+  # schedule shutdown for one minute ssh session can exit properly (immediatly reboot will give random return value, if ssh server is terminated before ssh session close)
   - command: 'sudo shutdown -r +1'
     expected_result: 0
     stop_on_error: false

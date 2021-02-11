@@ -65,7 +65,7 @@ impl Task {
     pub fn run(&self, session: &Session, output: &mut LogFile) -> Result<State, Error> {
         // Run command in session
         let mut channel = session.channel_session()?;
-
+        
         // Add stderr stream to normal output
         channel.handle_extended_data(ExtendedData::Merge)?;
 
@@ -73,11 +73,23 @@ impl Task {
         
         let mut buffer = String::new();
 
-        channel.read_to_string(&mut buffer).unwrap();
+        // catch session timeout
+        match channel.read_to_string(&mut buffer) {
+            Err(e) => {
+                return Err(Error::new(ErrorCode::Session(-23), "Data Read Error/Timeout"))
+            },
+            _ => ()
+        }
 
         channel.wait_close()?;
 
-        output.write(LogSeverity::Info, &buffer).unwrap();
+        // catch session timeout
+        match output.write(LogSeverity::Info, &buffer) {
+            Err(e) => {
+                return Err(Error::new(ErrorCode::Session(-16), "Data Write Error/Timeout"))
+                },
+            _ => ()
+        }
 
         match channel.exit_status() {
             Ok(r) => {

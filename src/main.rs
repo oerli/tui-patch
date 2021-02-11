@@ -16,12 +16,10 @@ use config::{Config, State};
 // TODO:
 // - check for ssh key loaded and corresponds with username
 // - update while waiting
-// - timeout for ssh connection
-// - fix to catch all errors
 // - add timeout to yaml
 // - check ssh agent running
 // - ssh key added
-// - todo limit processes
+// - limit processes/add dependecies of server
 
 fn main() {
     // read parameters
