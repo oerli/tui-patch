@@ -40,8 +40,12 @@ impl Authenticator for Bitwarden {
             .arg(master_password)
             .arg("--raw")
             .output()
-            .expect("failed to execute process");
-        
+            .expect("bitwarden cli command bw not found!");
+            
+        if !output.status.success() {
+            return Err(Box::new(io::Error::new(io::ErrorKind::Other,from_utf8(&output.stderr)?)));
+        }
+
         let json = Command::new("bw")
             .arg("list")
             .arg("items")
@@ -49,7 +53,7 @@ impl Authenticator for Bitwarden {
             .arg(from_utf8(&output.stdout).unwrap())
             .arg("--raw")
             .output()
-            .expect("failed to execute process");
+            .expect("bitwarden cli command bw not found!");
 
         
         Ok(Bitwarden {

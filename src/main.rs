@@ -1,6 +1,7 @@
-use std::env;
-
 use std::io::prelude::*;
+
+use structopt::StructOpt;
+use std::path::PathBuf;
 
 use std::thread;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
@@ -22,20 +23,35 @@ mod authentication;
 use authentication::Authenticator;
 
 // TODO:
-// - add command line options and make bitwarden optional
 // - update while waiting
 // - add timeout to yaml
 // - check ssh agent running
 // - ssh key added
 // - limit processes/add dependecies of server
 
+#[derive(Debug, StructOpt)]
+#[structopt(name = "tui-patch", about = "An example of StructOpt usage.")]
+struct Opt {
+    /// Yaml Configuration file to execture
+    #[structopt(parse(from_os_str))]
+    config: PathBuf,
+
+    /// Log directory otherwise default (./log) will be used
+    #[structopt(short, long)]
+    log: Option<String>,
+
+    /// Provide Bitwarden Master Password to unlock the Vault,
+    /// User must have been logged in before
+    #[structopt(short, long)]
+    bitwarden: Option<String>,
+}
 
 fn main() {
     // read parameters
-    let args: Vec<String> = env::args().collect();
-    
+    let args = Opt::from_args();
+
     // open config file
-    let mut config_file = match File::open(&args[1]) {
+    let mut config_file = match File::open(args.config) {
         Ok(file) => file,
         Err(error) => panic!("{}", error)
     };
@@ -50,14 +66,17 @@ fn main() {
     let config: Config = serde_yaml::from_str(&raw_config).unwrap();
 
     // load bitwarden
-    let bitwarden = match Bitwarden::new(&args[2]) {
-        Ok(bitwarden) => Arc::new(bitwarden),
-        Err(error) => panic!("{}", error)
+    let bitwarden = match &args.bitwarden {
+        // exit if password is wrong
+        Some(path) => Arc::new(Some(Bitwarden::new(path).unwrap())),
+        None => Arc::new(None)
     };
 
     // create multithreaded progress bar
     let multi_progress = MultiProgress::new();
     let style = ProgressStyle::default_bar().template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}").progress_chars("##-");
+
+    let log_directory: Arc<String> = Arc::new(args.log.unwrap_or("./log".to_owned()));
 
     for target in config.targets {
         // add progress bar for thread
@@ -67,12 +86,15 @@ fn main() {
 
         // create a read only copy for each thread
         let authenticator = bitwarden.clone();
+        
+        // copy path for logs
+        let log = log_directory.clone();
 
         let _ = thread::spawn(move || {
             progress.set_message(target.host.as_str());
             
             // create a logfile
-            let mut log_file = LogFile::new("./log", &target.host);
+            let mut log_file = LogFile::new(&*log, &target.host);
             let mut worst_sate = State::Ok;
 
             match target.connect(&mut log_file, &*authenticator) {

@@ -39,7 +39,7 @@ pub enum State {
 }
 
 impl Target {
-    pub fn connect(&self, output: &mut LogFile, auth: &impl Authenticator) -> Result<Session, Box<dyn Error>> {
+    pub fn connect(&self, output: &mut LogFile, authenticator: &Option<impl Authenticator>) -> Result<Session, Box<dyn Error>> {
         // Open SSH Session to Address
         match TcpStream::connect(format!("{}:{}", self.host, self.port.unwrap_or(22u16)).as_str()) {
             Ok(tcp) => {
@@ -52,7 +52,10 @@ impl Target {
                             Some(password) => {
                                 match password.as_str() {
                                     "bitwarden" => {
-                                        session.userauth_password(&self.user, auth.get(&self.host, &self.user)?)?;
+                                        match authenticator {
+                                            Some(a) => session.userauth_password(&self.user, a.get(&self.host, &self.user)?)?,
+                                            None => return Err(Box::new(ssh2::Error::new(ssh2::ErrorCode::Session(-18), "Authentication method not available")))
+                                        }
                                     },
                                     _ => session.userauth_password(&self.user, password)?,
                                 }
