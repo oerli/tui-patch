@@ -5,6 +5,8 @@ use std::io::prelude::*;
 use std::thread;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
+use std::sync::Arc;
+
 use std::fs::{File};
 
 mod logfile;
@@ -13,13 +15,20 @@ use logfile::{LogFile, LogSeverity};
 mod config;
 use config::{Config, State};
 
+mod bitwarden;
+use bitwarden::Bitwarden;
+
+mod authentication;
+use authentication::Authenticator;
+
 // TODO:
-// - check for ssh key loaded and corresponds with username
+// - add command line options and make bitwarden optional
 // - update while waiting
 // - add timeout to yaml
 // - check ssh agent running
 // - ssh key added
 // - limit processes/add dependecies of server
+
 
 fn main() {
     // read parameters
@@ -40,10 +49,15 @@ fn main() {
     
     let config: Config = serde_yaml::from_str(&raw_config).unwrap();
 
-    // // create multithreaded progress bar
+    // load bitwarden
+    let bitwarden = match Bitwarden::new(&args[2]) {
+        Ok(bitwarden) => Arc::new(bitwarden),
+        Err(error) => panic!("{}", error)
+    };
+
+    // create multithreaded progress bar
     let multi_progress = MultiProgress::new();
     let style = ProgressStyle::default_bar().template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}").progress_chars("##-");
-
 
     for target in config.targets {
         // add progress bar for thread
@@ -51,14 +65,17 @@ fn main() {
         let progress = multi_progress.add(ProgressBar::new(count as u64));
         progress.set_style(style.clone());
 
+        // create a read only copy for each thread
+        let authenticator = bitwarden.clone();
+
         let _ = thread::spawn(move || {
             progress.set_message(target.host.as_str());
-
+            
             // create a logfile
             let mut log_file = LogFile::new("./log", &target.host);
             let mut worst_sate = State::Ok;
 
-            match target.connect(&mut log_file) {
+            match target.connect(&mut log_file, &*authenticator) {
                 Ok(c) => {
                     for task in target.tasks {
                         match task.run(&c, &mut log_file) {
@@ -75,7 +92,6 @@ fn main() {
 
                                     },
                                     State::Failed => {
-                                        worst_sate = State::Failed;
                                         progress.set_style(ProgressStyle::default_bar().template("[{elapsed_precise}] {bar:40.magenta/red} {pos:>7}/{len:7} {msg}").progress_chars("##-"));
                                         progress.set_message(&format!("{}: command failed.", &target.host));
                                         progress.finish_at_current_pos();
@@ -110,7 +126,8 @@ fn main() {
                 State::Warning => {
                     progress.finish_with_message(&format!("{}: done with warnings.", &target.host));
                 },
-                State::Failed => {},
+                // unreachable
+                State::Failed => {}
             }
         });
     }

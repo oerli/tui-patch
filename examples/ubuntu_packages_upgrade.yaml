@@ -35,8 +35,8 @@ tasks: &tasks
     expected_result: 0
     stop_on_error: true
 
-  # upgrade packages and also update to the most recent kernel
-  - command: 'sudo DEBIAN_FRONTEND=noninteractive apt-get -q full-upgrade --yes'
+  # upgrade packages and also update to the most recent kernel, force keep all config files
+  - command: 'sudo DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" -q full-upgrade --yes'
     expected_result: 0
     stop_on_error: true
 
@@ -48,10 +48,17 @@ tasks: &tasks
 targets:
   - host: 'server1.domain.com'
     user: 'user'
+    password: 'password'
     port: 22
     tasks: *tasks
   
   - host: 'server2.domain.com'
     user: 'user'
-    port: 22
+    # use the ssh agent loaded identiity
+    tasks: *tasks
+
+  - host: 'server3.domain.com'
+    user: 'user'
+    # use the bitwarden stored password (password can never be "bitwarden")
+    password: 'bitwarden'
     tasks: *tasks

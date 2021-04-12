@@ -13,7 +13,7 @@ pub enum LogSeverity {
     Failed,
     Warning,
     Info,
-    Debug,
+    // Debug,
 }
 
 pub struct LogFile {
@@ -66,10 +66,10 @@ impl LogFile {
                     self.file.as_ref().unwrap().write(format!("\n[{}] 🏁 INFO: ", Utc::now()).as_bytes())?;
                     self.file.as_ref().unwrap().write_all(buffer.as_bytes())?;
                 },
-                LogSeverity::Debug => {
-                    self.file.as_ref().unwrap().write(format!("\n[{}] 🐜 DEBUG: ", Utc::now()).as_bytes())?;
-                    self.file.as_ref().unwrap().write_all(buffer.as_bytes())?;
-                },
+                // LogSeverity::Debug => {
+                //     self.file.as_ref().unwrap().write(format!("\n[{}] 🐜 DEBUG: ", Utc::now()).as_bytes())?;
+                //     self.file.as_ref().unwrap().write_all(buffer.as_bytes())?;
+                // },
             }
             return Ok(());
         } else {

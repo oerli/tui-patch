@@ -1,10 +1,13 @@
 use std::io::prelude::*;
 use std::net::{TcpStream};
-use ssh2::{Session, Error, ErrorCode, ExtendedData};
+use std::error::Error;
+
+use ssh2::{Session, ErrorCode, ExtendedData};
 
 use serde::Deserialize;
 
 use crate::logfile::{LogFile, LogSeverity};
+use crate::authentication::Authenticator;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -15,8 +18,9 @@ pub struct Config {
 #[derive(Debug, Deserialize)]
 pub struct Target {
     pub host: String,
-    port: u16,
+    port: Option<u16>,
     user: String,
+    password: Option<String>,
     pub tasks: Vec<Task>,
 }
 
@@ -35,34 +39,45 @@ pub enum State {
 }
 
 impl Target {
-    pub fn connect(&self, output: &mut LogFile) -> Result<Session, Error> {
+    pub fn connect(&self, output: &mut LogFile, auth: &impl Authenticator) -> Result<Session, Box<dyn Error>> {
         // Open SSH Session to Address
-        match TcpStream::connect(format!("{}:{}", self.host, self.port).as_str()) {
+        match TcpStream::connect(format!("{}:{}", self.host, self.port.unwrap_or(22u16)).as_str()) {
             Ok(tcp) => {
                 match Session::new() {
                     Ok(mut session) => {
                         session.set_timeout(150000);
                         session.set_tcp_stream(tcp);
                         session.handshake()?;
-                        session.userauth_agent(&self.user)?;
+                        match &self.password {
+                            Some(password) => {
+                                match password.as_str() {
+                                    "bitwarden" => {
+                                        session.userauth_password(&self.user, auth.get(&self.host, &self.user)?)?;
+                                    },
+                                    _ => session.userauth_password(&self.user, password)?,
+                                }
+                            },
+                            None => session.userauth_agent(&self.user)?,
+                        }
+                        
                         Ok(session)
                     },
                     Err(e) => {
                         output.write(LogSeverity::Failed, &format!("Connection Error: {}", e)).unwrap();
-                        return Err(Error::new(ErrorCode::Session(-26), "Connection Error"))
+                        return Err(Box::new(ssh2::Error::new(ssh2::ErrorCode::Session(-26), "Connection Error")))
                     }
                 }
             },
             Err(e) => {
                 output.write(LogSeverity::Failed, &format!("Connection Error: {}", e)).unwrap();
-                return Err(Error::new(ErrorCode::Session(-9), "Connection Error"))
+                return Err(Box::new(ssh2::Error::new(ErrorCode::Session(-9), "Connection Error")))
             }
         }
     }
 }
 
 impl Task {
-    pub fn run(&self, session: &Session, output: &mut LogFile) -> Result<State, Error> {
+    pub fn run(&self, session: &Session, output: &mut LogFile) -> Result<State, Box<dyn Error>> {
         // Run command in session
         let mut channel = session.channel_session()?;
         
@@ -75,8 +90,8 @@ impl Task {
 
         // catch session timeout
         match channel.read_to_string(&mut buffer) {
-            Err(e) => {
-                return Err(Error::new(ErrorCode::Session(-23), "Data Read Error/Timeout"))
+            Err(_e) => {
+                return Err(Box::new(ssh2::Error::new(ErrorCode::Session(-23), "Data Read Error/Timeout")))
             },
             _ => ()
         }
@@ -85,8 +100,8 @@ impl Task {
 
         // catch session timeout
         match output.write(LogSeverity::Info, &buffer) {
-            Err(e) => {
-                return Err(Error::new(ErrorCode::Session(-16), "Data Write Error/Timeout"))
+            Err(_e) => {
+                return Err(Box::new(ssh2::Error::new(ErrorCode::Session(-16), "Data Write Error/Timeout")))
                 },
             _ => ()
         }
@@ -107,7 +122,7 @@ impl Task {
             },
             Err(e) => {
                 output.write(LogSeverity::Error, &e.to_string()).unwrap();
-                return Err(e);
+                return Err(Box::new(e));
             }
         }
     }
