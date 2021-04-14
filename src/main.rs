@@ -3,6 +3,8 @@ use std::io::prelude::*;
 use structopt::StructOpt;
 use std::path::PathBuf;
 
+use rpassword;
+
 use std::thread;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
@@ -40,13 +42,22 @@ struct Opt {
     #[structopt(default_value = "./log", short, long, help = "Specify the log output directory, the directory will be created if it does not exist. Each logfile will be created with hostname and timestamp.")]
     log: String,
 
-    #[structopt(short, long, help = "Pass your Bitwarden master password to unlock the vault. Setup bitwarden-cli before use (bw login).")]
+    #[structopt(short, long, help = "Pass your Bitwarden master password to unlock the vault. Specify '-' to get prompt to enter hidden password. Setup bitwarden-cli before use (bw login).")]
     bitwarden: Option<String>,
 }
 
 fn main() {
     // read parameters
     let args = Opt::from_args();
+
+    // check if bitwarden password should be read by user input
+    let bitwarden_secret = match args.bitwarden {
+        Some(secret) => { match secret == "-" {
+            true => rpassword::read_password_from_tty(Some("Bitwarden Master Password: ")).ok(),
+            false => Some(secret)
+        }},
+        None => None
+    };
 
     // open config file
     let mut config_file = match File::open(args.config) {
@@ -64,7 +75,7 @@ fn main() {
     let config: Config = serde_yaml::from_str(&raw_config).unwrap();
 
     // load bitwarden
-    let bitwarden = match &args.bitwarden {
+    let bitwarden = match &bitwarden_secret {
         // exit if password is wrong
         Some(path) => Arc::new(Some(Bitwarden::new(path).unwrap())),
         None => Arc::new(None)
