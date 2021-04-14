@@ -27,22 +27,20 @@ use authentication::Authenticator;
 // - add timeout to yaml
 // - check ssh agent running
 // - ssh key added
-// - limit processes/add dependecies of server
+// - limit processes
+// - add dependecies of server
+// - alternative file structure with just a list of hosts/tasks
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "tui-patch", about = "An example of StructOpt usage.")]
+#[structopt(name = "tui-patch", about = "Run SSH commands from a YAML script file in parallel.")]
 struct Opt {
-    /// Yaml Configuration file to execture
-    #[structopt(parse(from_os_str))]
+    #[structopt(parse(from_os_str), help = "YAML script file, for format details see in examples folder.")]
     config: PathBuf,
 
-    /// Log directory otherwise default (./log) will be used
-    #[structopt(short, long)]
-    log: Option<String>,
+    #[structopt(default_value = "./log", short, long, help = "Specify the log output directory, the directory will be created if it does not exist. Each logfile will be created with hostname and timestamp.")]
+    log: String,
 
-    /// Provide Bitwarden Master Password to unlock the Vault,
-    /// User must have been logged in before
-    #[structopt(short, long)]
+    #[structopt(short, long, help = "Pass your Bitwarden master password to unlock the vault. Setup bitwarden-cli before use (bw login).")]
     bitwarden: Option<String>,
 }
 
@@ -76,7 +74,7 @@ fn main() {
     let multi_progress = MultiProgress::new();
     let style = ProgressStyle::default_bar().template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}").progress_chars("##-");
 
-    let log_directory: Arc<String> = Arc::new(args.log.unwrap_or("./log".to_owned()));
+    let log_directory: Arc<String> = Arc::new(args.log);
 
     for target in config.targets {
         // add progress bar for thread

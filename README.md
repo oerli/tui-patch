@@ -17,5 +17,45 @@ The log files will be written when each command terminates.
 ./target/debug/tui-patch ./examples/ubuntu_packages_upgrade.yaml
 ```
 
+![screenshot](doc/tui-patch.png)
+
 ## Configuration example
 Each config file must exist of a tasks and targets section. See for more details in examples folder.
+```yaml
+# tasks is a list with all commands which should be executed in one ssh session
+tasks: &tasks
+  # command (eg. hostnamectl status) which should be executed on the target host
+  - command: 'hostnamectl status'
+    # expected return value of the exectued command
+    expected_result: 0
+    # dependend on the match of the value if following commands should be executed as well or not
+    stop_on_error: false
+  # second command
+  - command: 'service --status-all'
+    expected_result: 0
+    stop_on_error: false
+
+# targets are a list of remote hosts
+targets:
+    # hostname used
+  - host: 'server1.domain.com'
+    user: 'user'
+    # if password login is used specify password
+    password: 'password'
+    # optional port (default 22 if not specified)
+    port: 22
+    # referes to tasks list (it must be called tasks)
+    tasks: *tasks
+
+  - host: 'server2'
+    # if only username is specified ssh agent is used with key login
+    user: 'admin'
+    tasks: *tasks
+
+  - host: 'server3'
+    # specify remote login username/search name for username in bitwarden
+    user: 'admin'
+    # use the bitwarden stored password (password can never be "bitwarden")
+    password: 'bitwarden'
+    tasks: *tasks
+```
