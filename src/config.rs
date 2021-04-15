@@ -5,6 +5,7 @@ use std::error::Error;
 use ssh2::{Session, ErrorCode, ExtendedData};
 
 use serde::Deserialize;
+use std::collections::HashMap;
 
 use crate::logfile::{LogFile, LogSeverity};
 use crate::authentication::Authenticator;
@@ -12,7 +13,9 @@ use crate::authentication::Authenticator;
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub targets: Vec<Target>,
-    pub tasks: Vec<Task>,
+
+    #[serde(flatten)]
+    tasks: HashMap<String, Vec<Task>>,
 }
 
 #[derive(Debug, Deserialize)]
