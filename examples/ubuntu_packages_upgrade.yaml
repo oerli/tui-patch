@@ -46,18 +46,19 @@ tasks: &tasks
     stop_on_error: false
 
 targets:
-  - host: 'server1.domain.com'
+    # host can be looked up in phpipam
+  - host: 'server1'
     user: 'user'
     password: 'password'
     port: 22
     tasks: *tasks
   
-  - host: 'server2.domain.com'
+  - host: 'server2'
     user: 'user'
     # use the ssh agent loaded identiity
     tasks: *tasks
 
-  - host: 'server3.domain.com'
+  - host: 'server3'
     user: 'user'
     # use the bitwarden stored password (password can never be "bitwarden")
     password: 'bitwarden'

@@ -1,3 +1,5 @@
+pub mod bitwarden;
+
 use std::error::Error;
 
 pub trait Authenticator {

@@ -1,28 +1,31 @@
 use std::io::prelude::*;
+use std::io;
 
 use structopt::StructOpt;
 use std::path::PathBuf;
 
 use rpassword;
 
+use reqwest::Url;
+
 use std::thread;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 use std::sync::Arc;
 
-use std::fs::{File};
+use std::fs::File;
 
-mod logfile;
-use logfile::{LogFile, LogSeverity};
+use log::error;
+mod logger;
 
 mod config;
 use config::{Config, State};
 
-mod bitwarden;
-use bitwarden::Bitwarden;
+mod authenticator;
+use authenticator::{Authenticator, bitwarden::Bitwarden};
 
-mod authentication;
-use authentication::Authenticator;
+mod resolver;
+use resolver::{Resolver, phpipam::PhpIpam};
 
 // TODO:
 // - update while waiting
@@ -32,6 +35,9 @@ use authentication::Authenticator;
 // - limit processes
 // - add dependecies of server
 // - alternative file structure with just a list of hosts/tasks
+// - catch all unnesessary unwraps in log
+// - implement own error
+// - change logger to writer
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "tui-patch", about = "Run SSH commands from a YAML script file in parallel.")]
@@ -44,12 +50,20 @@ struct Opt {
 
     #[structopt(short, long, help = "Pass your Bitwarden master password to unlock the vault. Specify '-' to get prompt to enter hidden password. Setup bitwarden-cli before use (bw login).")]
     bitwarden: Option<String>,
+
+    #[structopt(short, long, help = "Provide the URL to your PhpIpam and the PhpIpam App Name and App Code. Make sure you use 'SSL with App code token' in PhpIpam with 'Read' permission.")]
+    phpipam: Option<String>,
 }
 
 fn main() {
     // read parameters
     let args = Opt::from_args();
 
+    // setup log
+    let log_directory: Arc<String> = Arc::new(args.log);
+    // let log = log_directory.clone();
+    // logger::init(&*log, "main");
+    
     // check if bitwarden password should be read by user input
     let bitwarden_secret = match args.bitwarden {
         Some(secret) => { match secret == "-" {
@@ -59,6 +73,32 @@ fn main() {
         None => None
     };
 
+    // check if ipam password should be read by user input
+    let ipam_url = match args.phpipam {
+        Some(u) => {
+            // use url for app name and app code
+            let mut url =  Url::parse(&u).unwrap();
+            if url.username() == "" {
+                let stdin = io::stdin();
+                let mut app = String::new();
+                println!("PHPIpam API Name: ");
+                stdin.read_line(&mut app).unwrap();
+                url.set_username(&app[..&app.len()-1]).unwrap();
+            }
+            if url.password() == None {
+                let code = rpassword::read_password_from_tty(Some("PHPIpam API Code: ")).unwrap();
+                url.set_password(Some(&code)).unwrap();
+            }
+            Some(url)
+        },
+        None => None,
+    };
+
+    let resolver = Arc::new(match ipam_url {
+        Some(u) => PhpIpam::new(u).ok(),
+        None => None
+    });
+    
     // open config file
     let mut config_file = match File::open(args.config) {
         Ok(file) => file,
@@ -77,15 +117,21 @@ fn main() {
     // load bitwarden
     let bitwarden = match &bitwarden_secret {
         // exit if password is wrong
-        Some(path) => Arc::new(Some(Bitwarden::new(path).unwrap())),
+        Some(path) => Arc::new(
+            match Bitwarden::new(path) {
+                    Ok(bw) => Some(bw),
+                    Err(e) => {
+                        error!("{}", e);
+                        None
+                    },
+                }
+            ),
         None => Arc::new(None)
     };
 
     // create multithreaded progress bar
     let multi_progress = MultiProgress::new();
     let style = ProgressStyle::default_bar().template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}").progress_chars("##-");
-
-    let log_directory: Arc<String> = Arc::new(args.log);
 
     for target in config.targets {
         // add progress bar for thread
@@ -95,21 +141,23 @@ fn main() {
 
         // create a read only copy for each thread
         let authenticator = bitwarden.clone();
+        let resolver = resolver.clone();
         
         // copy path for logs
         let log = log_directory.clone();
-
+        
         let _ = thread::spawn(move || {
             progress.set_message(target.host.as_str());
             
             // create a logfile
-            let mut log_file = LogFile::new(&*log, &target.host);
+            let _ = logger::init(&*log, &target.host);
+
             let mut worst_sate = State::Ok;
 
-            match target.connect(&mut log_file, &*authenticator) {
+            match target.connect( &*authenticator, &*resolver) {
                 Ok(c) => {
                     for task in target.tasks {
-                        match task.run(&c, &mut log_file) {
+                        match task.run(&c) {
                             Ok(r) => {
                                 match r {
                                     State::Ok => {
@@ -133,7 +181,8 @@ fn main() {
                             Err(e) => {
                                 progress.set_style(ProgressStyle::default_bar().template("[{elapsed_precise}] {bar:40.red/red} {pos:>7}/{len:7} {msg}").progress_chars("XX-"));
                                 progress.finish_at_current_pos();
-                                log_file.write(LogSeverity::Error, &e.to_string()).unwrap();
+                                
+                                error!("{}", e);
                                 return
                             }
                         }
@@ -143,7 +192,7 @@ fn main() {
                     progress.set_style(ProgressStyle::default_bar().template("[{elapsed_precise}] {bar:40.red/red} {pos:>7}/{len:7} {msg}").progress_chars("XX-"));
                     progress.set_message(&format!("{}: connection failed.", &target.host));
                     progress.finish_at_current_pos();
-                    log_file.write(LogSeverity::Error, &e.to_string()).unwrap();
+                    error!("{}", &e);
                     return
                 }
             }

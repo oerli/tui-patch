@@ -8,7 +8,7 @@ use std::str::from_utf8;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::authentication::Authenticator;
+use super::Authenticator;
 
 #[derive(Debug, Deserialize)]
 struct Item {
@@ -93,6 +93,6 @@ impl Authenticator for Bitwarden {
             }
         }
 
-        Err(Box::new(io::Error::new(io::ErrorKind::NotFound, "Password in Bitwarden not found!")))
+        Err(Box::new(io::Error::new(io::ErrorKind::NotFound, "password in bitwarden not found!")))
     }
 }

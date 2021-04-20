@@ -7,8 +7,11 @@ use ssh2::{Session, ErrorCode, ExtendedData};
 use serde::Deserialize;
 use std::collections::HashMap;
 
-use crate::logfile::{LogFile, LogSeverity};
-use crate::authentication::Authenticator;
+use log::{error, warn, info};
+
+use crate::authenticator::Authenticator;
+
+use crate::resolver::Resolver;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -21,6 +24,7 @@ pub struct Config {
 #[derive(Debug, Deserialize)]
 pub struct Target {
     pub host: String,
+    ip: Option<String>,
     port: Option<u16>,
     user: String,
     password: Option<String>,
@@ -42,9 +46,27 @@ pub enum State {
 }
 
 impl Target {
-    pub fn connect(&self, output: &mut LogFile, authenticator: &Option<impl Authenticator>) -> Result<Session, Box<dyn Error>> {
+    pub fn connect(&self, authenticator: &Option<impl Authenticator>, resolver: &Option<impl Resolver>) -> Result<Session, Box<dyn Error>> {
+        // try resolver
+        let address = match resolver {
+            // always fall back to dns name
+            Some(resolver) => {
+                match resolver.get(&self.host) {
+                    Ok(ip) => {
+                        info!("found ip address: {}", ip);
+                        ip
+                    },
+                    Err(e) => {
+                        error!("unable to resolve ip: {}", e);
+                        self.host.to_string()
+                    }
+                }
+            },
+            None => self.host.to_string(),
+        };
+
         // Open SSH Session to Address
-        match TcpStream::connect(format!("{}:{}", self.host, self.port.unwrap_or(22u16)).as_str()) {
+        match TcpStream::connect(format!("{}:{}", address, self.port.unwrap_or(22u16)).as_str()) {
             Ok(tcp) => {
                 match Session::new() {
                     Ok(mut session) => {
@@ -57,7 +79,7 @@ impl Target {
                                     "bitwarden" => {
                                         match authenticator {
                                             Some(a) => session.userauth_password(&self.user, a.get(&self.host, &self.user)?)?,
-                                            None => return Err(Box::new(ssh2::Error::new(ssh2::ErrorCode::Session(-18), "Authentication method not available")))
+                                            None => return Err(Box::new(ssh2::Error::new(ssh2::ErrorCode::Session(-18), "authentication method not available")))
                                         }
                                     },
                                     _ => session.userauth_password(&self.user, password)?,
@@ -69,13 +91,13 @@ impl Target {
                         Ok(session)
                     },
                     Err(e) => {
-                        output.write(LogSeverity::Failed, &format!("Connection Error: {}", e)).unwrap();
+                        error!("Connection Error: {}", e);
                         return Err(Box::new(ssh2::Error::new(ssh2::ErrorCode::Session(-26), "Connection Error")))
                     }
                 }
             },
             Err(e) => {
-                output.write(LogSeverity::Failed, &format!("Connection Error: {}", e)).unwrap();
+                error!("Connection Error: {} {}", format!("{}:{}", address, self.port.unwrap_or(22u16)).as_str(), e);
                 return Err(Box::new(ssh2::Error::new(ErrorCode::Session(-9), "Connection Error")))
             }
         }
@@ -83,7 +105,7 @@ impl Target {
 }
 
 impl Task {
-    pub fn run(&self, session: &Session, output: &mut LogFile) -> Result<State, Box<dyn Error>> {
+    pub fn run(&self, session: &Session) -> Result<State, Box<dyn Error>> {
         // Run command in session
         let mut channel = session.channel_session()?;
         
@@ -104,13 +126,8 @@ impl Task {
 
         channel.wait_close()?;
 
-        // catch session timeout
-        match output.write(LogSeverity::Info, &buffer) {
-            Err(_e) => {
-                return Err(Box::new(ssh2::Error::new(ErrorCode::Session(-16), "Data Write Error/Timeout")))
-                },
-            _ => ()
-        }
+        // write output to logfile
+        info!("{}", buffer);
 
         match channel.exit_status() {
             Ok(r) => {
@@ -118,16 +135,16 @@ impl Task {
                     return Ok(State::Ok);
                 } else {
                     if self.stop_on_error == true {
-                        output.write(LogSeverity::Failed, &format!("expected result {} but recieved {}", self.expected_result, r)).unwrap();
+                        error!("expected result {} but recieved {}", self.expected_result, r);
                         return Ok(State::Failed);
                     } else {
-                        output.write(LogSeverity::Warning, &format!("expected result {} but recieved {}", self.expected_result, r)).unwrap();
+                        warn!("expected result {} but recieved {}", self.expected_result, r);
                         return Ok(State::Warning);
                     }
                 }
             },
             Err(e) => {
-                output.write(LogSeverity::Error, &e.to_string()).unwrap();
+                error!("{}", e);
                 return Err(Box::new(e));
             }
         }
