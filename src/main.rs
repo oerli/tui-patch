@@ -158,31 +158,27 @@ fn main() {
                 Ok(c) => {
                     for task in target.tasks {
                         match task.run(&c) {
-                            Ok(r) => {
-                                match r {
-                                    State::Ok => {
-                                        progress.inc(1);
-                                    },
-                                    State::Warning => {
-                                        worst_sate = State::Warning;
-                                        progress.set_style(ProgressStyle::default_bar().template("[{elapsed_precise}] {bar:40.magenta/red} {pos:>7}/{len:7} {msg}").progress_chars("##-"));
-                                        progress.set_message(&format!("{}: warning.", &target.host));
-                                        progress.inc(1);
+                            Ok(State::Ok) => {
+                                progress.inc(1);
+                            },
+                            Ok(State::Warning) => {
+                                worst_sate = State::Warning;
+                                progress.set_style(ProgressStyle::default_bar().template("[{elapsed_precise}] {bar:40.magenta/red} {pos:>7}/{len:7} {msg}").progress_chars("##-"));
+                                progress.set_message(&format!("{}: warning.", &target.host));
+                                progress.inc(1);
 
-                                    },
-                                    State::Failed => {
-                                        progress.set_style(ProgressStyle::default_bar().template("[{elapsed_precise}] {bar:40.magenta/red} {pos:>7}/{len:7} {msg}").progress_chars("##-"));
-                                        progress.set_message(&format!("{}: command failed.", &target.host));
-                                        progress.finish_at_current_pos();
-                                        return
-                                    },
-                                }
+                            },
+                            Ok(State::Failed) => {
+                                progress.set_style(ProgressStyle::default_bar().template("[{elapsed_precise}] {bar:40.magenta/red} {pos:>7}/{len:7} {msg}").progress_chars("##-"));
+                                progress.set_message(&format!("{}: command failed.", &target.host));
+                                progress.finish_at_current_pos();
+                                return
                             },
                             Err(e) => {
                                 progress.set_style(ProgressStyle::default_bar().template("[{elapsed_precise}] {bar:40.red/red} {pos:>7}/{len:7} {msg}").progress_chars("XX-"));
                                 progress.finish_at_current_pos();
                                 
-                                error!("{}", e);
+                                error!("{}", &e);
                                 return
                             }
                         }
