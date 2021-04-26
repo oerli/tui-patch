@@ -38,6 +38,7 @@ use resolver::{Resolver, phpipam::PhpIpam};
 // - catch all unnesessary unwraps in log
 // - implement own error
 // - change logger to writer
+// - show task number in log
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "tui-patch", about = "Run SSH commands from a YAML script file in parallel.")]
@@ -59,6 +60,21 @@ fn main() {
     // read parameters
     let args = Opt::from_args();
 
+    // open config file
+    let mut config_file = match File::open(args.config) {
+        Ok(file) => file,
+        Err(error) => panic!("{}", error)
+    };
+
+    // read config file
+    let mut raw_config = String::new();
+    match config_file.read_to_string(&mut raw_config) {
+        Ok(string) => string,
+        Err(error) => panic!("{}", error)
+    };
+    
+    let config: Config = serde_yaml::from_str(&raw_config).unwrap();
+    
     // setup log
     let log_directory: Arc<String> = Arc::new(args.log);
     // let log = log_directory.clone();
@@ -98,21 +114,6 @@ fn main() {
         Some(u) => PhpIpam::new(u).ok(),
         None => None
     });
-    
-    // open config file
-    let mut config_file = match File::open(args.config) {
-        Ok(file) => file,
-        Err(error) => panic!("{}", error)
-    };
-
-    // read config file
-    let mut raw_config = String::new();
-    match config_file.read_to_string(&mut raw_config) {
-        Ok(string) => string,
-        Err(error) => panic!("{}", error)
-    };
-    
-    let config: Config = serde_yaml::from_str(&raw_config).unwrap();
 
     // load bitwarden
     let bitwarden = match &bitwarden_secret {

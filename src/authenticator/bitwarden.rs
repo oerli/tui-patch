@@ -68,7 +68,7 @@ impl Authenticator for Bitwarden {
             match &item.name {
                 Some(item_name) => {
                     // check if hostname appears in bitwarden name
-                    if item_name.contains(name) {
+                    if item_name.to_lowercase().contains(&name.to_lowercase()) {
                         match &item.login {
                             Some(item_login) => {
                                 match &item_login.username {
