@@ -148,7 +148,7 @@ fn main() {
         let log = log_directory.clone();
         
         let _ = thread::spawn(move || {
-            progress.set_message(target.host.as_str());
+            progress.set_message(target.host.clone());
             
             // create a logfile
             let _ = logger::init(&*log, &target.host);
@@ -165,13 +165,13 @@ fn main() {
                             Ok(State::Warning) => {
                                 worst_sate = State::Warning;
                                 progress.set_style(ProgressStyle::default_bar().template("[{elapsed_precise}] {bar:40.magenta/red} {pos:>7}/{len:7} {msg}").progress_chars("##-"));
-                                progress.set_message(&format!("{}: warning.", &target.host));
+                                progress.set_message(format!("{}: warning.", &target.host));
                                 progress.inc(1);
 
                             },
                             Ok(State::Failed) => {
                                 progress.set_style(ProgressStyle::default_bar().template("[{elapsed_precise}] {bar:40.magenta/red} {pos:>7}/{len:7} {msg}").progress_chars("##-"));
-                                progress.set_message(&format!("{}: command failed.", &target.host));
+                                progress.set_message(format!("{}: command failed.", &target.host));
                                 progress.finish_at_current_pos();
                                 return
                             },
@@ -187,7 +187,7 @@ fn main() {
                 },
                 Err(e) => {
                     progress.set_style(ProgressStyle::default_bar().template("[{elapsed_precise}] {bar:40.red/red} {pos:>7}/{len:7} {msg}").progress_chars("XX-"));
-                    progress.set_message(&format!("{}: connection failed.", &target.host));
+                    progress.set_message(format!("{}: connection failed.", &target.host));
                     progress.finish_at_current_pos();
                     error!("{}", &e);
                     return
@@ -198,10 +198,10 @@ fn main() {
             match worst_sate {
                 State::Ok => {
                     progress.set_style(ProgressStyle::default_bar().template("[{elapsed_precise}] {bar:40.green/green} {pos:>7}/{len:7} {msg}").progress_chars("##-"));
-                    progress.finish_with_message(&format!("{}: done.", &target.host));
+                    progress.finish_with_message(format!("{}: done.", &target.host));
                 },
                 State::Warning => {
-                    progress.finish_with_message(&format!("{}: done with warnings.", &target.host));
+                    progress.finish_with_message(format!("{}: done with warnings.", &target.host));
                 },
                 // unreachable
                 State::Failed => {}
